@@ -157,7 +157,7 @@ select.sort{padding:8px 10px;border-radius:12px;border:1px solid var(--line);bac
 .prow .n{font-weight:600;flex:1;min-width:0}
 .prow .v{font:700 18px var(--display)}
 .bars{display:grid;gap:6px}
-.bar{display:grid;grid-template-columns:28px 1fr 30px;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.bar{display:grid;grid-template-columns:36px 1fr 30px;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
 .bar .track{height:12px;background:var(--surface2);border-radius:6px;overflow:hidden;display:flex}
 .bar .track i{display:block;height:100%}
 .toplist{list-style:none;margin:0;padding:0}
@@ -192,9 +192,13 @@ select.sort{padding:8px 10px;border-radius:12px;border:1px solid var(--line);bac
 .locbox .btns .btn{padding:7px 12px;font-size:14px}
 .okloc{font-size:13px;margin-top:6px}
 .err{color:var(--danger)}
-.rate-edit{display:flex;gap:4px;margin:6px 0}
-.rate-edit button{border:0;background:none;padding:2px}
-.rate-edit svg{width:34px;height:34px}
+.rate-edit{display:flex;align-items:center;gap:2px;margin:6px 0}
+.rate-edit .star-slot{position:relative;width:38px;height:38px;display:grid;place-items:center}
+.rate-edit svg{width:34px;height:34px;pointer-events:none}
+.rate-edit button{position:absolute;top:0;bottom:0;width:50%;border:0;background:none;padding:0;margin:0}
+.rate-edit button.l{left:0;border-radius:6px 0 0 6px}
+.rate-edit button.r{right:0;border-radius:0 6px 6px 0}
+.rate-edit .rate-val{margin-left:8px;font:700 15px/1 var(--display);color:var(--muted)}
 .myrate{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin:14px 0}
 .myrate h3,.others h3{font:700 17px var(--display);margin:0 0 4px;display:flex;align-items:center;gap:8px}
 .myrate h3 img,.others h3 img{width:24px;height:24px;border-radius:50%}
@@ -308,6 +312,8 @@ const ICONS = {
 };
 const TABS = [["movie","Movies"],["restaurant","Restaurants"],["place","Places"],["activity","Activities"],["recipe","Recipes"],["map","Map"],["stats","Stats"]];
 const STAR_PATH = "M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z";
+const STAR_HALF_PATH = "M12 2.5V17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z";
+const STAR_STEPS = [5,4.5,4,3.5,3,2.5,2,1.5,1,0.5];
 const PERSON_COLORS = ["#D9480F","#1971C2","#2B8A3E","#AE3EC9","#C2255C","#0C8599","#B08900","#5F3DC4"];
 
 /* ---------- state ---------- */
@@ -320,7 +326,41 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const cssVar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("show"),2600);}
-function starsHTML(n,size){let h='<span class="stars" aria-label="'+(n||0)+' of 5 stars">';for(let i=1;i<=5;i++)h+='<svg viewBox="0 0 24 24"'+(size?' style="width:'+size+'px;height:'+size+'px"':'')+'><path d="'+STAR_PATH+'" fill="var('+(i<=n?'--star':'--star-off')+')"/></svg>';return h+'</span>';}
+function starState(n,i){return n>=i?"full":n>=i-0.5?"half":"off";}
+function starPaths(st){
+  if(st==="full") return '<path d="'+STAR_PATH+'" fill="var(--star)"/>';
+  if(st==="half") return '<path d="'+STAR_PATH+'" fill="var(--star-off)"/><path d="'+STAR_HALF_PATH+'" fill="var(--star)"/>';
+  return '<path d="'+STAR_PATH+'" fill="var(--star-off)"/>';
+}
+function starsHTML(n,size){const v=Number(n)||0;let h='<span class="stars" aria-label="'+v+' of 5 stars">';for(let i=1;i<=5;i++)h+='<svg viewBox="0 0 24 24"'+(size?' style="width:'+size+'px;height:'+size+'px"':'')+'>'+starPaths(starState(v,i))+'</svg>';return h+'</span>';}
+function rateEditHTML(){
+  return '<div class="rate-edit" role="radiogroup" aria-label="Your stars">'+
+    [1,2,3,4,5].map(i=>{
+      const h=i-0.5;
+      return '<span class="star-slot" data-i="'+i+'"><svg viewBox="0 0 24 24"></svg>'+
+        '<button type="button" role="radio" class="l" data-s="'+h+'" aria-label="'+h+' stars"></button>'+
+        '<button type="button" role="radio" class="r" data-s="'+i+'" aria-label="'+i+' star'+(i>1?'s':'')+'"></button></span>';
+    }).join("")+'<span class="rate-val" aria-hidden="true"></span></div>';
+}
+function wireRateEdit(root,initial,onChange){
+  const box=root.querySelector(".rate-edit");
+  if(!box) return ()=>{};
+  let cur=Number(initial)||0;
+  const valEl=box.querySelector(".rate-val");
+  const paint=preview=>{
+    const show=preview!=null?preview:cur;
+    box.querySelectorAll(".star-slot").forEach(sl=>{sl.querySelector("svg").innerHTML=starPaths(starState(show,+sl.dataset.i));});
+    box.querySelectorAll("button[data-s]").forEach(b=>b.setAttribute("aria-checked",+b.dataset.s===cur));
+    if(valEl) valEl.textContent=show>0?show+" ★":"";
+  };
+  paint();
+  box.querySelectorAll("button[data-s]").forEach(b=>{
+    b.addEventListener("click",()=>{const v=+b.dataset.s;cur=(v===cur)?0:v;paint();onChange(cur);});
+    b.addEventListener("pointerenter",e=>{if(e.pointerType==="mouse")paint(+b.dataset.s);});
+  });
+  box.addEventListener("pointerleave",()=>paint());
+  return v=>{cur=Number(v)||0;paint();};
+}
 function ratingsOf(it){const r=it.ratings||{};const out={};for(const k in r){const x=r[k];if(x&&(x.s>0||x.c))out[k]=x;}return out;}
 function reviewedByMe(it){return !!(it&&ratingsOf(it)[me]);}
 function avgOf(it){if(!reviewedByMe(it))return null;const r=Object.values(ratingsOf(it)).filter(x=>x.s>0);return r.length?r.reduce((a,b)=>a+b.s,0)/r.length:null;}
@@ -781,10 +821,10 @@ function renderStats(v){
   }
   h+='</div>';
   h+='<div class="panel"><h3>Star distribution</h3><div class="bars">';
-  const counts=ppl.map(id=>{const c=[0,0,0,0,0,0];for(const i of all){const r=ratingsOf(i)[id];if(r&&r.s>0)c[r.s]++;}return c;});
-  const mx=Math.max(1,...[1,2,3,4,5].map(s=>counts.reduce((a,c)=>a+c[s],0)));
-  for(let s=5;s>=1;s--){const tot=counts.reduce((a,c)=>a+c[s],0);
-    h+='<div class="bar"><span>'+s+'★</span><div class="track">'+counts.map((c,i)=>'<i style="width:'+(c[s]/mx*100)+'%;background:'+colorOf(ppl[i])+'" title="'+esc(nameOf(ppl[i]))+': '+c[s]+'"></i>').join("")+'</div><span>'+tot+'</span></div>';}
+  const counts=ppl.map(id=>{const c={};for(const i of all){const r=ratingsOf(i)[id];if(r&&r.s>0){const k=Math.round(r.s*2)/2;c[k]=(c[k]||0)+1;}}return c;});
+  const mx=Math.max(1,...STAR_STEPS.map(s=>counts.reduce((a,c)=>a+(c[s]||0),0)));
+  for(const s of STAR_STEPS){const tot=counts.reduce((a,c)=>a+(c[s]||0),0);
+    h+='<div class="bar"><span>'+s+'★</span><div class="track">'+counts.map((c,i)=>'<i style="width:'+((c[s]||0)/mx*100)+'%;background:'+colorOf(ppl[i])+'" title="'+esc(nameOf(ppl[i]))+': '+(c[s]||0)+'"></i>').join("")+'</div><span>'+tot+'</span></div>';}
   h+='</div><div class="legend" style="margin-top:10px">'+ppl.map(id=>'<span class="chip" style="--c:'+colorOf(id)+'"><span class="dot"></span>'+esc(nameOf(id))+'</span>').join("")+'</div></div>';
   { const now=new Date(), months=[];
     for(let i=11;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"));}
@@ -917,9 +957,8 @@ function openItem(id){
   h+='<div class="myrate"><h3>'+imgTag(me)+'Your rating</h3>'+
     (hasMine?'<div id="rateView">'+(mine.s>0?starsHTML(mine.s,22):'<span class="muted small">No stars</span>')+(mine.c?'<p style="white-space:pre-wrap;margin:6px 0 0">'+esc(mine.c)+'</p>':'')+
       reactRow(it,me)+'<div class="actions"><button class="btn ghost" id="editRate">Edit rating</button></div></div>':'')+
-    '<div id="rateEdit"'+(hasMine?' class="hidden"':'')+'><div class="rate-edit" role="radiogroup" aria-label="Your stars">'+
-    [1,2,3,4,5].map(i=>'<button type="button" role="radio" data-s="'+i+'" aria-label="'+i+' star'+(i>1?'s':'')+'"><svg viewBox="0 0 24 24"><path d="'+STAR_PATH+'"/></svg></button>').join("")+
-    '</div><label class="field" style="margin:6px 0"><span class="hidden">Comment</span><textarea id="myc" maxlength="2000" placeholder="What did you think?">'+esc(mine.c||"")+'</textarea></label>'+
+    '<div id="rateEdit"'+(hasMine?' class="hidden"':'')+'>'+rateEditHTML()+
+    '<label class="field" style="margin:6px 0"><span class="hidden">Comment</span><textarea id="myc" maxlength="2000" placeholder="What did you think?">'+esc(mine.c||"")+'</textarea></label>'+
     '<div class="actions"><button class="btn primary" id="saveRate">Save rating</button>'+(hasMine?'<button class="btn ghost" id="cancelRate">Cancel</button>':'')+'<button class="btn ghost" id="clearRate">Clear</button></div></div>'+
     (K.photos?'<div class="photos" id="myPhotos"></div><label class="btn ghost" style="display:inline-block;margin-top:8px">Add photos<input type="file" accept="image/*" multiple hidden id="photoIn"></label>':'')+
     '</div>';
@@ -942,15 +981,13 @@ function openItem(id){
   if(K.photos){ ensureThumbs(); setupPhotos(id,s); }
   if(K.geo&&hasLoc(it)){ setTimeout(()=>{ sheetMap=makeMap(s.querySelector("#itemMap"),{zoomControl:false}); sheetMap.setView([it.lat,it.lng],16); pinMarker(it).addTo(sheetMap); sheetMap.invalidateSize(); },60); }
   let stars=mine.s||0;
-  const paint=()=>s.querySelectorAll(".rate-edit button").forEach(b=>{const n=+b.dataset.s;b.querySelector("path").setAttribute("fill","var("+(n<=stars?"--star":"--star-off")+")");b.setAttribute("aria-checked",n===stars);});
-  paint();
-  s.querySelectorAll(".rate-edit button").forEach(b=>b.addEventListener("click",()=>{stars=(+b.dataset.s===stars)?0:+b.dataset.s;paint();}));
+  const setStars=wireRateEdit(s,stars,v=>{stars=v;});
   s.querySelector("#saveRate").addEventListener("click",async e=>{const c=s.querySelector("#myc").value.trim();e.target.disabled=true;
     const ok=await saveRating(id,(stars||c)?{s:stars,c,at:Date.now()}:null);e.target.disabled=false;if(ok){toast("Rating saved");closeSheet();}});
   s.querySelector("#clearRate").addEventListener("click",async()=>{if(await saveRating(id,null)){toast("Rating cleared");closeSheet();}});
   const er=s.querySelector("#editRate"), cr=s.querySelector("#cancelRate");
   if(er) er.addEventListener("click",()=>{s.querySelector("#rateView").classList.add("hidden");s.querySelector("#rateEdit").classList.remove("hidden");});
-  if(cr) cr.addEventListener("click",()=>{stars=mine.s||0;paint();s.querySelector("#myc").value=mine.c||"";s.querySelector("#rateEdit").classList.add("hidden");s.querySelector("#rateView").classList.remove("hidden");});
+  if(cr) cr.addEventListener("click",()=>{stars=mine.s||0;setStars(stars);s.querySelector("#myc").value=mine.c||"";s.querySelector("#rateEdit").classList.add("hidden");s.querySelector("#rateView").classList.remove("hidden");});
   s.querySelector("#toggleStatus").addEventListener("click",async()=>{
     const upd={status:done?"todo":"done",updatedAt:Date.now()};
     if(!done) upd["visits/"+push(ref(rdb,"items")).key]={date:today(),by:me,at:Date.now()};
@@ -1101,15 +1138,14 @@ function openForm(kind,it){
       '<div class="okloc" id="locMsg"></div><div class="btns"><button type="button" class="btn" id="geoMe">Use my location</button><button type="button" class="btn ghost" id="clearLoc">Remove pin</button></div></div></div>';
   }
   h+='<label class="field"><span>Notes</span><textarea name="notes" maxlength="2000" placeholder="Who recommended it, what to order, best time to go...">'+esc(it.notes||"")+'</textarea></label>';
-  if(isNew) h+='<div class="field"><span>Your rating (optional)</span><div class="rate-edit" role="radiogroup" aria-label="Your stars">'+[1,2,3,4,5].map(i=>'<button type="button" role="radio" data-s="'+i+'" aria-label="'+i+' star'+(i>1?'s':'')+'"><svg viewBox="0 0 24 24"><path d="'+STAR_PATH+'"/></svg></button>').join("")+'</div><textarea name="mycomment" maxlength="2000" placeholder="Your comment" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);min-height:70px"></textarea></div>';
+  if(isNew) h+='<div class="field"><span>Your rating (optional)</span>'+rateEditHTML()+'<textarea name="mycomment" maxlength="2000" placeholder="Your comment" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);min-height:70px"></textarea></div>';
   h+='<p class="err small" id="formErr"></p><div class="actions"><button class="btn primary" type="submit">'+(isNew?"Add "+K.one:"Save changes")+'</button><button class="btn ghost" type="button" data-close>Cancel</button></div></form>';
   if(sheetMap){sheetMap.remove();sheetMap=null;}
   openSheet(h,"var("+K.color+")");
   const s=$("#sheet"), form=s.querySelector("#itemForm");
   if(isNew){ const vf=s.querySelector("#vdateField"); form.status.addEventListener("change",()=>vf.classList.toggle("hidden",form.status.value!=="done")); }
   let stars=0;
-  const paint=()=>s.querySelectorAll(".rate-edit button").forEach(b=>{const n=+b.dataset.s;b.querySelector("path").setAttribute("fill","var("+(n<=stars?"--star":"--star-off")+")");b.setAttribute("aria-checked",n===stars);});
-  paint(); s.querySelectorAll(".rate-edit button").forEach(b=>b.addEventListener("click",()=>{stars=(+b.dataset.s===stars)?0:+b.dataset.s;paint();}));
+  wireRateEdit(s,0,v=>{stars=v;});
   let loc=hasLoc(it)?{lat:it.lat,lng:it.lng}:null, marker=null;
   if(K.geo){
     const inp=form.loc, msg=s.querySelector("#locMsg"), res=s.querySelector("#addrRes");

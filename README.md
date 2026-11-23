@@ -4,7 +4,7 @@
 
 A free, private web app for a group of people to keep shared lists of **movies, restaurants, places, activities and recipes**: what you want to do, what you've already done, and how you liked it.
 
-It works for any small group: friends, family, flatmates, or just two people. Everyone gives their own 1–5 star rating and comment, so you can see at a glance where you agree and where you don't.
+It works for any small group: friends, family, flatmates, or just two people. Everyone gives their own 0.5–5 star rating (in half-star steps) and comment, so you can see at a glance where you agree and where you don't.
 
 It runs in the browser, on a computer or a phone. You can add it to your home screen like an app, iPhone included. Nothing to install and no code to write: all you need is a GitHub account and a free Firebase project.
 
