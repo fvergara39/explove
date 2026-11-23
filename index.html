@@ -217,6 +217,23 @@ a.link{color:var(--sec,var(--place));font-weight:600}
 .leaflet-container{font-family:var(--body);background:var(--sea)}
 .leaflet-tooltip{font-weight:600}
 .people{gap:0}
+.people .bell{position:relative;width:36px;height:36px;flex:none;margin-left:8px;border:0;border-radius:50%;background:var(--surface2);color:var(--ink);display:grid;place-items:center}
+.people .bell svg{width:20px;height:20px}
+.people .bell + img{margin-left:8px}
+.people .bell .dot{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center}
+/* reactions on reviews */
+.react{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.react button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:2px 10px;font-size:14px;line-height:1.5}
+.react button.on{border-color:var(--sec,var(--movie));background:var(--surface2);font-weight:600}
+.react button:disabled{cursor:default}
+/* notifications */
+.notif{list-style:none;margin:0;padding:0}
+.notif li{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.notif li:first-child{border-top:0}
+.notif img{width:28px;height:28px;border-radius:50%;flex:none}
+.notif .txt{flex:1;min-width:0;background:none;border:0;padding:0;text-align:left;font-size:15px}
+.notif li.new .txt{font-weight:600}
+.notif .when{color:var(--muted);font-size:13px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -274,7 +291,7 @@ const PERSON_COLORS = ["#D9480F","#1971C2","#2B8A3E","#AE3EC9","#C2255C","#0C859
 /* ---------- state ---------- */
 let me=null, items=new Map(), users={}, appTitle=localStorageGet("title")||DEFAULT_TITLE, editingTitle=false, tab="movie";
 const ui={ movie:{q:"",status:"all",sort:"recent"}, restaurant:{q:"",status:"all",sort:"recent"}, place:{q:"",status:"all",sort:"recent"}, activity:{q:"",status:"all",sort:"recent"}, recipe:{q:"",status:"all",sort:"recent"}, map:{restaurant:true,place:true} };
-let unsubs=[];
+let unsubs=[], seenAt=null;
 
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
@@ -390,15 +407,17 @@ onAuthStateChanged(auth, async u=>{
   start();
 });
 function start(){
-  unsubs.forEach(x=>x());unsubs=[];
+  unsubs.forEach(x=>x());unsubs=[];seenAt=null;
   $("#tabsNav").classList.remove("hidden"); renderTabs();
   let gotItems=false;
   const fail=e=>{ if(denied(e)) showSignIn("This account doesn't have access to this app."); else toast("Connection problem. Reload the page."); };
   unsubs.push(onValue(ref(rdb,"users"),s=>{users=s.val()||{};renderPeople();if(gotItems)rerender();},fail));
   unsubs.push(onValue(ref(rdb,"settings/app"),s=>{const v=s.val(),t=v&&v.title,has=typeof t==="string"&&!!t.trim();appTitle=has?t:DEFAULT_TITLE;paintTitle();if(!has)askTitle();},()=>{}));
   unsubs.push(onValue(ref(rdb,"items"),s=>{
-    const v=s.val()||{};items=new Map(Object.keys(v).map(k=>[k,Object.assign({id:k},v[k])]));gotItems=true;rerender();
+    const v=s.val()||{};items=new Map(Object.keys(v).map(k=>[k,Object.assign({id:k},v[k])]));gotItems=true;rerender();renderPeople();
   },fail));
+  /* when this person last opened the notification centre; first visit starts from now, so old history isn't "new" */
+  unsubs.push(onValue(ref(rdb,"notifSeen/"+me),s=>{const v=s.val();if(typeof v==="number"){seenAt=v;renderPeople();}else set(ref(rdb,"notifSeen/"+me),Date.now()).catch(()=>{});},()=>{}));
 }
 function rerender(){
   if(tab==="map"&&mainMap){ refreshMainPins(); return; }
@@ -478,10 +497,13 @@ function render(){
 }
 function renderPeople(){
   const ppl=[me,...others()].filter(Boolean), ids=ppl.slice(0,4), more=ppl.length-ids.length;
-  $("#people").innerHTML=ids.map(id=>'<img alt="'+esc(nameOf(id))+'" title="'+esc(nameOf(id))+'" referrerpolicy="no-referrer" src="'+esc(avatar(id))+'">').join("")+
+  const unread=me&&seenAt!==null?activity().filter(n=>n.at>seenAt).length:0;
+  const bell='<button class="bell" id="notifBtn" type="button" title="Notifications" aria-label="Notifications'+(unread?', '+unread+' new':'')+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8z"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>'+(unread?'<span class="dot">'+(unread>9?'9+':unread)+'</span>':'')+'</button>';
+  $("#people").innerHTML=ids.map((id,i)=>'<img alt="'+esc(nameOf(id))+'" title="'+esc(nameOf(id))+'" referrerpolicy="no-referrer" src="'+esc(avatar(id))+'">'+(i===0&&id===me?bell:'')).join("")+
     (more>0?'<span class="more" title="'+esc(ppl.slice(4).map(nameOf).join(", "))+'">+'+more+'</span>':'')+
     (me?'<button class="btn ghost" id="signout" style="margin-left:10px;padding:6px 10px;font-size:13px">Sign out</button>':'');
   const so=$("#signout"); if(so) so.onclick=()=>{ if(confirm("Sign out?")) signOut(auth); };
+  const nb=$("#notifBtn"); if(nb) nb.onclick=openNotifs;
 }
 function rrowHTML(id,r){
   if(!r) return '<div class="rrow">'+imgTag(id)+'<span class="none">'+(id===me?"You haven't rated it yet":esc(nameOf(id))+" hasn't rated it yet")+'</span></div>';
@@ -659,6 +681,70 @@ async function write(fn){
 }
 function saveRating(id,val){return write(()=>update(ref(rdb,"items/"+id),{["ratings/"+me]:val,updatedAt:Date.now()}));}
 
+/* ---------- reactions on reviews ----------
+   Stored as items/{id}/reactions/{reviewer}/{reactor} = {e, at}. One reaction per person per review: tap it again to remove it. */
+const REACTIONS=["👍","❤️","😂","😮","🔥"];
+function reactRow(it,k){
+  const by=(it.reactions||{})[k]||{}, counts={};
+  for(const a in by){const e=by[a]&&by[a].e; if(e) counts[e]=(counts[e]||0)+1;}
+  if(k===me) return REACTIONS.some(e=>counts[e])?'<div class="react">'+REACTIONS.filter(e=>counts[e]).map(e=>'<button type="button" disabled>'+e+' '+counts[e]+'</button>').join("")+'</div>':"";
+  const mineE=(by[me]||{}).e;
+  return '<div class="react" data-rk="'+esc(k)+'">'+REACTIONS.map(e=>'<button type="button" data-e="'+e+'" class="'+(mineE===e?"on":"")+'" aria-pressed="'+(mineE===e)+'">'+e+(counts[e]?' '+counts[e]:'')+'</button>').join("")+'</div>';
+}
+function wireReactions(root,id){
+  root.querySelectorAll(".react[data-rk] button[data-e]").forEach(b=>b.onclick=()=>toggleReaction(id,b.closest(".react").dataset.rk,b.dataset.e));
+}
+async function toggleReaction(id,rk,e){
+  const it=items.get(id); if(!it||!me) return;
+  const cur=((it.reactions||{})[rk]||{})[me], path="items/"+id+"/reactions/"+rk+"/"+me;
+  const ok=await write(()=>cur&&cur.e===e?remove(ref(rdb,path)):set(ref(rdb,path),{e,at:Date.now()}));
+  const sheet=$("#sheet"), el=sheet.querySelector('.react[data-rk="'+rk+'"]');
+  if(!ok||!sheet.classList.contains("open")||sheet.dataset.item!==id||!el) return;
+  const t=document.createElement("div"); t.innerHTML=reactRow(items.get(id)||it,rk);
+  el.replaceWith(t.firstElementChild); wireReactions(sheet,id);
+}
+
+/* ---------- notifications ----------
+   Built from the data itself: items added, reviews and reactions by other people.
+   Reviews and reactions only count for items you have reviewed, the same rule that hides other people's reviews. */
+function activity(){
+  const out=[];
+  for(const it of items.values()){
+    if(it.createdBy&&it.createdBy!==me&&it.createdAt) out.push({type:"item",who:it.createdBy,at:it.createdAt,it});
+    const r=ratingsOf(it);
+    for(const k of Object.keys(r)) if(k!==me&&r[k].at) out.push({type:"review",who:k,at:r[k].at,it});
+    if(!reviewedByMe(it)) continue;
+    for(const rev of Object.keys(it.reactions||{})){
+      if(!r[rev]) continue;
+      for(const a of Object.keys(it.reactions[rev]||{})){const x=it.reactions[rev][a]; if(a!==me&&x&&x.e&&x.at) out.push({type:"reaction",who:a,at:x.at,e:x.e,rev,it});}
+    }
+  }
+  return out.sort((a,b)=>b.at-a.at).slice(0,80);
+}
+function notifText(n){
+  const who="<b>"+esc(nameOf(n.who))+"</b>", title="<b>"+esc(n.it.title)+"</b>";
+  if(n.type==="item") return who+" added "+title+" ("+KINDS[n.it.kind].one+")";
+  if(n.type==="review") return who+" reviewed "+title;
+  return who+" reacted "+esc(n.e)+" to "+(n.rev===me?"your":esc(nameOf(n.rev))+"'s")+" review of "+title;
+}
+function ago(t){
+  const m=Math.round((Date.now()-t)/60000); if(m<1) return "just now"; if(m<60) return m+" min ago";
+  const h=Math.round(m/60); if(h<24) return h+" h ago";
+  const d=Math.round(h/24); if(d<7) return d+" d ago";
+  return new Date(t).toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+}
+function openNotifs(){
+  if(!me) return;
+  const list=activity(), since=seenAt||0, fresh=list.filter(n=>n.at>since).length;
+  let h='<div class="shead"><div><h2 id="sheetTitle">Notifications</h2><p class="muted" style="margin:0">Added, reviewed or reacted to by the others</p></div><button class="x" data-close aria-label="Close">×</button></div>';
+  h+=list.length?'<ul class="notif">'+list.map((n,i)=>'<li class="'+(n.at>since?"new":"")+'">'+imgTag(n.who)+'<button type="button" class="txt" data-n="'+i+'">'+notifText(n)+'</button><span class="when">'+esc(ago(n.at))+'</span></li>').join("")+'</ul>'
+    :'<p class="muted">Nothing yet. When someone adds an item, reviews one or reacts to a review, it shows up here.</p>';
+  openSheet(h,"var(--place)");
+  const s=$("#sheet"); s.dataset.item="";
+  s.querySelectorAll("[data-n]").forEach(b=>b.addEventListener("click",()=>{const n=list[+b.dataset.n];closeSheet();openItem(n.it.id);}));
+  if(fresh) write(()=>set(ref(rdb,"notifSeen/"+me),Date.now()));
+}
+
 function openItem(id){
   const it=items.get(id); if(!it) return;
   const K=KINDS[it.kind], r=ratingsOf(it), mine=r[me]||{s:0,c:""};
@@ -674,7 +760,7 @@ function openItem(id){
   const hasMine=!!(r[me]);
   h+='<div class="myrate"><h3>'+imgTag(me)+'Your rating</h3>'+
     (hasMine?'<div id="rateView">'+(mine.s>0?starsHTML(mine.s,22):'<span class="muted small">No stars</span>')+(mine.c?'<p style="white-space:pre-wrap;margin:6px 0 0">'+esc(mine.c)+'</p>':'')+
-      '<div class="actions"><button class="btn ghost" id="editRate">Edit rating</button></div></div>':'')+
+      reactRow(it,me)+'<div class="actions"><button class="btn ghost" id="editRate">Edit rating</button></div></div>':'')+
     '<div id="rateEdit"'+(hasMine?' class="hidden"':'')+'><div class="rate-edit" role="radiogroup" aria-label="Your stars">'+
     [1,2,3,4,5].map(i=>'<button type="button" role="radio" data-s="'+i+'" aria-label="'+i+' star'+(i>1?'s':'')+'"><svg viewBox="0 0 24 24"><path d="'+STAR_PATH+'"/></svg></button>').join("")+
     '</div><label class="field" style="margin:6px 0"><span class="hidden">Comment</span><textarea id="myc" maxlength="2000" placeholder="What did you think?">'+esc(mine.c||"")+'</textarea></label>'+
@@ -685,7 +771,7 @@ function openItem(id){
   h+='<div class="others">';
   for(const k of os){const x=r[k];
     if(!r[me]){h+='<div class="o"><h3>'+imgTag(k)+esc(nameOf(k))+'</h3><p class="muted small">Has reviewed this. Save your rating to see it.</p></div>';continue;}
-    h+='<div class="o"><h3>'+imgTag(k)+esc(nameOf(k))+'</h3>'+(x.s>0?starsHTML(x.s,20):'<span class="muted small">No stars</span>')+(x.c?'<p>'+esc(x.c)+'</p>':'')+'</div>';}
+    h+='<div class="o"><h3>'+imgTag(k)+esc(nameOf(k))+'</h3>'+(x.s>0?starsHTML(x.s,20):'<span class="muted small">No stars</span>')+(x.c?'<p>'+esc(x.c)+'</p>':'')+reactRow(it,k)+'</div>';}
   if(!os.length) h+='<p class="muted small">'+(others().length===1?esc(nameOf(others()[0]))+' hasn\'t rated this yet.':'Nobody else has rated this yet.')+'</p>';
   if(K.photos) h+='<div id="otherPhotos"></div>';
   h+='</div><div class="actions"><button class="btn ghost" id="toggleStatus">Mark as '+(done?K.todo.toLowerCase():K.done.toLowerCase())+'</button><button class="btn ghost" id="editItem">Edit details</button><button class="btn danger" id="delItem">Delete</button></div>';
@@ -693,6 +779,8 @@ function openItem(id){
   if(sheetUnsub){sheetUnsub();sheetUnsub=null;}
   openSheet(h,"var("+K.color+")");
   const s=$("#sheet");
+  s.dataset.item=id;
+  wireReactions(s,id);
   setupVisits(id,s);
   setupLinks(id,s);
   if(K.photos){ ensureThumbs(); setupPhotos(id,s); }

@@ -16,6 +16,7 @@ It runs in the browser, on a computer or a phone. You can add it to your home sc
 
 - **Five sections:** Movies, Restaurants, Places, Activities and Recipes. Each item has a "to do" / "done" status, fields that fit the section, and free-form notes.
 - **Everyone's reviews:** each person gives their own stars and comment. Other people's reviews stay hidden until you've added yours, so nobody is influenced. Your saved review can be edited whenever you want.
+- **Reactions and notifications:** under each review you can tap 👍 ❤️ 😂 😮 🔥 (tap again to remove). The bell next to your avatar lists what the others have added, reviewed or reacted to since you last looked.
 - **Map:** restaurants and places appear on an OpenStreetMap map. To set a location you can search an address, tap the map, use your current location, or paste a Google Maps link. Every item has "Open in Google Maps" and "Directions" links.
 - **Visit dates:** marking something as done saves the date. You can also add repeat visits or past dates.
 - **Recipe photos:** up to 8 photos per person per recipe, with thumbnails shown right in the list.
