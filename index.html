@@ -88,6 +88,11 @@ nav.tabs button[aria-selected="true"]{color:var(--tab,var(--ink));background:var
 
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:16px 0 12px}
 .toolbar h2{font:700 26px/1.1 var(--display);margin:0 auto 0 0;letter-spacing:-.01em;color:var(--sec)}
+.list-head{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--bg);padding:8px 0}
+.list-title{display:flex;align-items:center;gap:12px;min-width:0}
+.list-title h2{margin:0}
+.list-head .seg{margin-left:auto}
+.add-item{display:inline-flex;align-items:center;gap:6px;flex:none;white-space:nowrap;background:var(--sec);color:#fff}
 .search{flex:1 1 180px;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
 .seg{display:inline-flex;background:var(--surface2);border-radius:12px;padding:3px}
 .seg button{border:0;background:none;padding:6px 10px;border-radius:9px;font-size:14px;font-weight:600;color:var(--muted)}
@@ -125,9 +130,6 @@ select.sort{padding:8px 10px;border-radius:12px;border:1px solid var(--line);bac
 .btn.ghost{background:none;border:1px solid var(--line)}
 .btn.danger{background:none;color:var(--danger);border:1px solid var(--line)}
 .btn:disabled{opacity:.5;cursor:default}
-.fab{position:fixed;right:max(16px,calc(50% - 464px));bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:15;border:0;border-radius:18px;
-  background:var(--sec);color:#fff;font:700 16px var(--display);padding:14px 20px;box-shadow:var(--shadow);display:flex;align-items:center;gap:8px}
-@media (min-width:760px){.fab{bottom:calc(24px + env(safe-area-inset-bottom,0px))}}
 .notice{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:14px;color:var(--muted);margin:12px 0}
 
 /* map */
@@ -271,7 +273,6 @@ a.link{color:var(--sec,var(--place));font-weight:600}
   <main id="view"><div class="empty"><strong>Loading</strong>Connecting to your shared lists.</div></main>
 </div>
 <nav class="tabs hidden" id="tabsNav" aria-label="Sections"><div class="inner" role="tablist" id="tabs"></div></nav>
-<button class="fab hidden" id="fab"></button>
 <div class="scrim" id="scrim"></div>
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></section>
 <div class="toast" id="toast" role="status"></div>
@@ -576,7 +577,7 @@ async function geocode(q){
 /* ---------- auth / boot ---------- */
 function showSignIn(msg){
   unsubs.forEach(u=>u());unsubs=[];
-  $("#fab").classList.add("hidden"); $("#tabsNav").classList.add("hidden");
+  $("#tabsNav").classList.add("hidden");
   $("#view").innerHTML='<div class="empty" style="margin-top:24px"><strong>Welcome</strong>'+(msg?'<p class="err">'+esc(msg)+'</p>':'<p>Sign in with your Google account to open your shared lists.</p>')+
     '<button class="btn primary" id="signin" style="--sec:var(--movie);margin-top:8px">Sign in with Google</button>'+(msg?' <button class="btn ghost" id="signout2" style="margin-top:8px">Use another account</button>':'')+'</div>';
   $("#signin").onclick=async()=>{
@@ -680,16 +681,13 @@ function render(){
   if(!me) return;
   if(tab==="recipe") ensureThumbs();
   renderPeople();
-  const v=$("#view"), fab=$("#fab");
+  const v=$("#view");
   document.documentElement.style.setProperty("--sec",KINDS[tab]?"var("+KINDS[tab].color+")":"var(--place)");
   if(tab!=="map"&&mainMap){mainMap.remove();mainMap=null;}
   if(KINDS[tab]){
-    fab.classList.remove("hidden");
-    fab.innerHTML='<span aria-hidden="true">+</span> Add '+KINDS[tab].one;
-    fab.onclick=()=>openForm(tab,null);
     renderList(v);
-  } else if(tab==="map"){ fab.classList.add("hidden"); renderMap(v); }
-  else { fab.classList.add("hidden"); renderStats(v); }
+  } else if(tab==="map") renderMap(v);
+  else renderStats(v);
 }
 function renderPeople(){
   const ppl=[me,...others()].filter(Boolean), ids=ppl.slice(0,4), more=ppl.length-ids.length;
@@ -721,11 +719,11 @@ function renderList(v){
   const ppl=[me,...others()].filter(Boolean), few=ppl.length<=3;
   let h='';
   if(items.size===0&&OLD_ITEMS.length&&!localStorageGet("imported")) h+='<div class="notice">Bring over the '+OLD_ITEMS.length+' things you added in the claude.ai version? <button class="btn primary" id="importOld" style="margin-left:6px;padding:6px 12px">Import</button></div>';
-  h+='<div class="toolbar"><h2>'+K.label+'</h2>'+
+  h+='<div class="toolbar list-head"><div class="list-title"><h2>'+K.label+'</h2><button class="btn add-item" type="button"><span aria-hidden="true">+</span> Add '+K.one+'</button></div>'+
     '<div class="seg" role="group" aria-label="Filter">'+[["all","All"],["todo",K.todo],["done",K.done]].map(([k,l])=>'<button data-status="'+k+'" aria-pressed="'+(st.status===k)+'">'+l+'</button>').join("")+'</div></div>'+
     '<div class="toolbar"><input class="search" type="search" placeholder="Search '+K.label.toLowerCase()+'" value="'+esc(st.q)+'" aria-label="Search">'+
     '<select class="sort" aria-label="Sort"><option value="recent">Newest first</option><option value="top">Highest rated</option><option value="unrated">Not rated by me</option><option value="last">Most recently done</option><option value="az">A to Z</option></select></div>';
-  if(!total) h+='<div class="empty"><strong>No '+K.label.toLowerCase()+' yet</strong>Add the first '+K.one+' with the button below. Everyone can rate it and leave a comment.</div>';
+  if(!total) h+='<div class="empty"><strong>No '+K.label.toLowerCase()+' yet</strong>Add the first '+K.one+' with the button beside the heading. Everyone can rate it and leave a comment.</div>';
   else if(!arr.length) h+='<div class="empty"><strong>Nothing matches</strong>Try a different search or filter.</div>';
   else h+='<div class="list">'+arr.map(it=>{
       const r=ratingsOf(it), done=(it.status||"todo")==="done";
@@ -738,6 +736,7 @@ function renderList(v){
         '<p class="m">'+esc(metaLine(it))+'</p>'+(K.photos?cardThumbs(it.id):'')+rows+'</button>';
     }).join("")+'</div>';
   v.innerHTML=h;
+  v.querySelector(".add-item").addEventListener("click",()=>openForm(tab,null));
   const imp=v.querySelector("#importOld"); if(imp) imp.onclick=importOld;
   v.querySelector(".sort").value=st.sort;
   const s=v.querySelector(".search");
